@@ -48,7 +48,7 @@
 
 ## Remaining Manual Steps (Pre-Launch Checklist)
 
-### 1. Render Security (before first boot)
+### 1. Render Security (before first boot) - Done
 
 - **Set `SETUP_PASSWORD`** in Render dashboard → Environment → `SETUP_PASSWORD`: use a 32+ char random password. Without this, anyone who reaches the Render URL can complete first-run setup.
 - **Set Inbound Rules**: Render → Service → Settings → Inbound Rules → allowlist your office/VPN IP range for HTTPS.
@@ -57,7 +57,7 @@
 
 ### 2. Supabase Setup
 
-Create a Supabase project and run these `CREATE TABLE` statements:
+Create a Supabase project and run these `CREATE TABLE` statements: - Done
 
 ```sql
 -- properties
@@ -146,13 +146,13 @@ ALTER TABLE maintenance   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE vendors       ENABLE ROW LEVEL SECURITY;
 ```
 
-**Then disable anon key public API access:**
+**Then disable anon key public API access:** - Done
 Supabase → Settings → API → disable the `anon` key if no public read is needed.
 
-**Then enable API audit logs:**
+**Then enable API audit logs:** - Done
 Supabase → Settings → Logs → API Logs → enable. Review weekly.
 
-### 3. Render Environment Variables
+### 3. Render Environment Variables - Done
 
 In the Render dashboard for the `openclaw` service, set values for:
 - `SUPABASE_URL` — your Supabase project URL (e.g., `https://xxxx.supabase.co`)
@@ -195,7 +195,7 @@ Then in `openclaw.json`, set `dmPolicy: "allowlist"` and add all 9 team member E
 - Gmail (dev): App Password, `imap.gmail.com:993`, `smtp.gmail.com:465`
 - GoDaddy (prod): Enable SMTP Auth → App Password → `imap.secureserver.net:993` / `smtpout.secureserver.net:465` + SPF/DKIM DNS
 
-### 6. LTB Blank PDFs
+### 6. LTB Blank PDFs - Done
 
 Place official fillable Ontario LTB forms at:
 ```
@@ -212,7 +212,7 @@ Before testing, populate Supabase with:
 - At least 1 tenant row linked to that property, with a real email address
 - At least 2–3 vendor rows (one plumber, one electrician)
 
-### 8. LLM API Spend Alerts
+### 8. LLM API Spend Alerts - Done
 
 - OpenAI dashboard → Limits → set monthly spend cap + billing alerts at 50% and 90%
 - Google Cloud Console → Gemini → Quotas → set quota + alert policy at 50% and 90%
