@@ -16,6 +16,14 @@ services:
         value: /data/workspace
       - key: OPENCLAW_GATEWAY_TOKEN
         generateValue: true
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
     disk:
       name: openclaw-data
       mountPath: /data
