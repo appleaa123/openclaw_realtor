@@ -70,7 +70,14 @@ Format per `references/brief-template.md`:
 
 ### Step 4: Deliver Brief
 
-Send via `wacli` to team WhatsApp group or manager number.
+Determine routing before sending:
+
+- **Routine brief** (general update, action item summary, task result with no concerns) → send via `wacli` to `TEAM_WHATSAPP_GROUP`
+- **Escalation** (unresolved issue, legal/financial risk, manager decision required, uncertainty about how to proceed) → send via `wacli` to `MANAGER_WHATSAPP` (DM)
+
+When in doubt, escalate to manager DM. Routing choice must be logged in the interaction record (Step 5).
+
+Send via `wacli` to the appropriate target.
 
 ### Step 5: Log Escalation
 
@@ -80,7 +87,7 @@ VALUES (
     '[tenant_id]',
     '[tenant_name]',
     'whatsapp',
-    'Escalation brief sent to team: [first 100 chars of situation bullet]',
+    'Escalation brief sent to [team group|manager DM]: [first 100 chars of situation bullet]',
     now()
 );
 ```

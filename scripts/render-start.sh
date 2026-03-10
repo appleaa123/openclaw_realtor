@@ -1,6 +1,7 @@
 #!/bin/sh
 set -e
 openclaw config set gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback true
+openclaw config set gateway.controlUi.dangerouslyDisableDeviceAuth true
 openclaw config set gateway.bind lan
 # Provision workspace templates on first run
 mkdir -p /data/workspace/forms
