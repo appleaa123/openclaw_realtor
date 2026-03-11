@@ -92,6 +92,12 @@ export function evaluateMissingDeviceIdentity(params: {
       return { kind: "reject-control-ui-insecure-auth" };
     }
   }
+  // dangerouslyDisableDeviceAuth=true means: skip device identity entirely for Control UI.
+  // Without this, the flag only skips the reject-control-ui-insecure-auth path but still
+  // falls through to reject-device-required when sharedAuthOk=false.
+  if (params.isControlUi && params.controlUiAuthPolicy.allowBypass) {
+    return { kind: "allow" };
+  }
   if (roleCanSkipDeviceIdentity(params.role, params.sharedAuthOk)) {
     return { kind: "allow" };
   }
