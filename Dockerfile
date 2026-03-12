@@ -119,16 +119,24 @@ WORKDIR /app
 
 # Install system utilities present in bookworm but missing in bookworm-slim.
 # On the full bookworm image these are already installed (apt-get is a no-op).
-# golang-go   — required by the wacli skill (go install)
 # ffmpeg      — required by the video-frames skill
+# Note: golang-go (Go 1.19) is NOT installed; Go 1.22 is installed below via tarball.
 RUN --mount=type=cache,id=openclaw-bookworm-apt-cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,id=openclaw-bookworm-apt-lists,target=/var/lib/apt,sharing=locked \
     apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      procps hostname curl git openssl golang-go ffmpeg
+      procps hostname curl git openssl ffmpeg
+
+# Install Go 1.22 — wacli requires Go 1.21+ (uses stdlib `slices` package).
+# Bookworm's golang-go is 1.19, which is too old and lacks `slices`.
+RUN curl -fsSL https://go.dev/dl/go1.22.11.linux-amd64.tar.gz \
+    | tar -C /usr/local -xz
+ENV PATH="/usr/local/go/bin:${PATH}"
 
 # Install uv (Python package manager) — required by the nano-pdf skill
 RUN curl -LsSf https://astral.sh/uv/install.sh | UV_INSTALL_DIR=/usr/local/bin sh
+# UV_TOOL_BIN_DIR ensures `uv tool install` places binaries in PATH (not ~/.local/bin)
+ENV UV_TOOL_BIN_DIR=/usr/local/bin
 
 RUN chown node:node /app
 

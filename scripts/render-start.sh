@@ -3,6 +3,8 @@ set -e
 openclaw config set gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback true
 openclaw config set gateway.controlUi.dangerouslyDisableDeviceAuth true
 openclaw config set gateway.bind lan
+# Ensure WhatsApp plugin is loaded into the active registry so QR login works
+openclaw config set channels.whatsapp.enabled true
 # Provision workspace templates on first run
 mkdir -p /data/workspace/forms
 [ -f /data/workspace/SOUL.md ]      || cp /app/workspace-templates/SOUL.md      /data/workspace/SOUL.md
@@ -18,5 +20,8 @@ if [ -n "$SETUP_PASSWORD" ]; then
   openclaw config set gateway.auth.mode password
   openclaw config set gateway.auth.password "$SETUP_PASSWORD"
 fi
+
+# Set default agent model to Gemini (picked up via GEMINI_API_KEY env var)
+openclaw config set agents.defaults.model.primary "google/gemini-2.5-flash"
 
 exec openclaw gateway --allow-unconfigured
