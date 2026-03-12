@@ -20,7 +20,12 @@ import { discoverOpenClawPlugins } from "./discovery.js";
 import { initializeGlobalHookRunner } from "./hook-runner-global.js";
 import { loadPluginManifestRegistry } from "./manifest-registry.js";
 import { isPathInside, safeStatSync } from "./path-safety.js";
-import { createPluginRegistry, type PluginRecord, type PluginRegistry } from "./registry.js";
+import {
+  createPluginRegistry,
+  type PluginChannelRegistration,
+  type PluginRecord,
+  type PluginRegistry,
+} from "./registry.js";
 import { setActivePluginRegistry } from "./runtime.js";
 import { createPluginRuntime, type CreatePluginRuntimeOptions } from "./runtime/index.js";
 import type { PluginRuntime } from "./runtime/types.js";
@@ -42,6 +47,9 @@ export type PluginLoadOptions = {
   runtimeOptions?: CreatePluginRuntimeOptions;
   cache?: boolean;
   mode?: "full" | "validate";
+  /** When true, skip setting the loaded registry as the active global registry.
+   *  Useful for schema-only extraction without side-effects on the running server. */
+  noActivate?: boolean;
 };
 
 const registryCache = new Map<string, PluginRegistry>();
@@ -815,7 +823,9 @@ export function loadOpenClawPlugins(options: PluginLoadOptions = {}): PluginRegi
   if (cacheEnabled) {
     registryCache.set(cacheKey, registry);
   }
-  activatePluginRegistry(registry, cacheKey);
+  if (!options.noActivate) {
+    activatePluginRegistry(registry, cacheKey);
+  }
   return registry;
 }
 
@@ -825,4 +835,64 @@ function safeRealpathOrResolve(value: string): string {
   } catch {
     return path.resolve(value);
   }
+}
+
+const silentLogger: PluginLogger = {
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+  debug: () => {},
+};
+
+/**
+ * Load all bundled channel plugins without activating them as the global registry.
+ * Returns their registered channel plugins so callers can extract configSchemas for
+ * the config UI — even when no channels are configured (fresh/unconfigured deployment).
+ */
+export function loadBundledChannelPluginsForSchema(options: {
+  config: OpenClawConfig;
+  workspaceDir?: string;
+}): PluginChannelRegistration[] {
+  const discovery = discoverOpenClawPlugins({ workspaceDir: options.workspaceDir });
+  const manifestRegistry = loadPluginManifestRegistry({
+    config: options.config,
+    workspaceDir: options.workspaceDir,
+    cache: true,
+    candidates: discovery.candidates,
+    diagnostics: discovery.diagnostics,
+  });
+
+  // Collect all bundled plugin IDs that register at least one channel
+  const bundledChannelPluginIds = manifestRegistry.plugins
+    .filter((p) => p.origin === "bundled" && p.channels.length > 0)
+    .map((p) => p.id);
+
+  if (bundledChannelPluginIds.length === 0) {
+    return [];
+  }
+
+  // Build a config that force-enables every bundled channel plugin so
+  // loadOpenClawPlugins will load them and register their channels.
+  const channelOverrides: Record<string, { enabled: true }> = {};
+  for (const pluginId of bundledChannelPluginIds) {
+    // Channel plugins use the same ID for both the plugin and the channel.
+    channelOverrides[pluginId] = { enabled: true };
+  }
+  const schemaCfg: OpenClawConfig = {
+    ...options.config,
+    channels: {
+      ...(options.config.channels as Record<string, unknown>),
+      ...channelOverrides,
+    },
+  };
+
+  const schemaRegistry = loadOpenClawPlugins({
+    config: schemaCfg,
+    workspaceDir: options.workspaceDir,
+    logger: silentLogger,
+    cache: false,
+    noActivate: true,
+  });
+
+  return schemaRegistry.channels;
 }

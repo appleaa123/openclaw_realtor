@@ -17,6 +17,15 @@ metadata:
               "bins": ["himalaya"],
               "label": "Install Himalaya (brew)",
             },
+            {
+              "id": "download-linux",
+              "kind": "download",
+              "url": "https://github.com/pimalaya/himalaya/releases/latest/download/himalaya-x86_64-unknown-linux-musl.tar.gz",
+              "bins": ["himalaya"],
+              "archive": "tar.gz",
+              "label": "Install Himalaya (Linux binary)",
+              "os": ["linux"],
+            },
           ],
       },
   }

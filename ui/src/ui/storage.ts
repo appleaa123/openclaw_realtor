@@ -32,6 +32,16 @@ function getSessionStorage(): Storage | null {
   return null;
 }
 
+function getLocalStorage(): Storage | null {
+  if (typeof window !== "undefined" && window.localStorage) {
+    return window.localStorage;
+  }
+  if (typeof localStorage !== "undefined") {
+    return localStorage;
+  }
+  return null;
+}
+
 function normalizeGatewayTokenScope(gatewayUrl: string): string {
   const trimmed = gatewayUrl.trim();
   if (!trimmed) {
@@ -55,13 +65,12 @@ function tokenSessionKeyForGateway(gatewayUrl: string): string {
   return `${TOKEN_SESSION_KEY_PREFIX}${normalizeGatewayTokenScope(gatewayUrl)}`;
 }
 
-function loadSessionToken(gatewayUrl: string): string {
+function loadLocalToken(gatewayUrl: string): string {
   try {
-    const storage = getSessionStorage();
+    const storage = getLocalStorage();
     if (!storage) {
       return "";
     }
-    storage.removeItem(LEGACY_TOKEN_SESSION_KEY);
     const token = storage.getItem(tokenSessionKeyForGateway(gatewayUrl)) ?? "";
     return token.trim();
   } catch {
@@ -69,20 +78,47 @@ function loadSessionToken(gatewayUrl: string): string {
   }
 }
 
-function persistSessionToken(gatewayUrl: string, token: string) {
+function loadSessionToken(gatewayUrl: string): string {
   try {
     const storage = getSessionStorage();
     if (!storage) {
-      return;
+      return loadLocalToken(gatewayUrl);
     }
     storage.removeItem(LEGACY_TOKEN_SESSION_KEY);
     const key = tokenSessionKeyForGateway(gatewayUrl);
-    const normalized = token.trim();
-    if (normalized) {
-      storage.setItem(key, normalized);
-      return;
+    const sessionToken = storage.getItem(key) ?? "";
+    if (sessionToken.trim()) {
+      return sessionToken.trim();
     }
-    storage.removeItem(key);
+    // Fall back to localStorage so sessions survive tab close / browser restart
+    return loadLocalToken(gatewayUrl);
+  } catch {
+    return "";
+  }
+}
+
+function persistSessionToken(gatewayUrl: string, token: string) {
+  try {
+    const key = tokenSessionKeyForGateway(gatewayUrl);
+    const normalized = token.trim();
+    const sessionStorage = getSessionStorage();
+    if (sessionStorage) {
+      sessionStorage.removeItem(LEGACY_TOKEN_SESSION_KEY);
+      if (normalized) {
+        sessionStorage.setItem(key, normalized);
+      } else {
+        sessionStorage.removeItem(key);
+      }
+    }
+    // Also persist to localStorage so sessions survive tab close / browser restart
+    const local = getLocalStorage();
+    if (local) {
+      if (normalized) {
+        local.setItem(key, normalized);
+      } else {
+        local.removeItem(key);
+      }
+    }
   } catch {
     // best-effort
   }

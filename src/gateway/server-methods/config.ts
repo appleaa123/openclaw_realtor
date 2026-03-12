@@ -30,7 +30,7 @@ import {
   writeRestartSentinel,
 } from "../../infra/restart-sentinel.js";
 import { scheduleGatewaySigusr1Restart } from "../../infra/restart.js";
-import { loadOpenClawPlugins } from "../../plugins/loader.js";
+import { loadBundledChannelPluginsForSchema, loadOpenClawPlugins } from "../../plugins/loader.js";
 import { diffConfigPaths } from "../config-reload.js";
 import {
   formatControlPlaneActor,
@@ -224,6 +224,13 @@ async function tryWriteRestartSentinelPayload(
   }
 }
 
+const silentLogger = {
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+  debug: () => {},
+};
+
 function loadSchemaWithPlugins(): ConfigSchemaResponse {
   const cfg = loadConfig();
   const workspaceDir = resolveAgentWorkspaceDir(cfg, resolveDefaultAgentId(cfg));
@@ -231,16 +238,23 @@ function loadSchemaWithPlugins(): ConfigSchemaResponse {
     config: cfg,
     cache: true,
     workspaceDir,
-    logger: {
-      info: () => {},
-      warn: () => {},
-      error: () => {},
-      debug: () => {},
-    },
+    logger: silentLogger,
   });
   // Note: We can't easily cache this, as there are no callback that can invalidate
   // our cache. However, both loadConfig() and loadOpenClawPlugins() already cache
   // their results, and buildConfigSchema() is just a cheap transformation.
+
+  // listChannelPlugins() returns only channels that are already loaded (i.e. configured).
+  // On a fresh/unconfigured deployment no channels are loaded, so the channel config
+  // forms would be missing ("Schema unavailable"). Fall back to loading all bundled
+  // channel plugins in schema-only mode (noActivate: true) so their configSchemas are
+  // available for first-time setup.
+  let channelRegistrations = listChannelPlugins();
+  if (channelRegistrations.length === 0) {
+    const bundled = loadBundledChannelPluginsForSchema({ config: cfg, workspaceDir });
+    channelRegistrations = bundled.map((reg) => reg.plugin);
+  }
+
   return buildConfigSchema({
     plugins: pluginRegistry.plugins.map((plugin) => ({
       id: plugin.id,
@@ -249,7 +263,7 @@ function loadSchemaWithPlugins(): ConfigSchemaResponse {
       configUiHints: plugin.configUiHints,
       configSchema: plugin.configJsonSchema,
     })),
-    channels: listChannelPlugins().map((entry) => ({
+    channels: channelRegistrations.map((entry) => ({
       id: entry.id,
       label: entry.meta.label,
       description: entry.meta.blurb,

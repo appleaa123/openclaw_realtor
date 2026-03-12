@@ -16,8 +16,10 @@ metadata:
               "formula": "steipete/tap/summarize",
               "bins": ["summarize"],
               "label": "Install summarize (brew)",
+              "os": ["darwin"],
             },
           ],
+        "note": "macOS only — no Linux binaries are available (https://github.com/steipete/summarize). On Linux/Docker use a direct LLM call with the URL or file content instead.",
       },
   }
 ---
