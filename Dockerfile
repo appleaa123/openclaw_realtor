@@ -135,8 +135,6 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 
 # Install uv (Python package manager) — required by the nano-pdf skill
 RUN curl -LsSf https://astral.sh/uv/install.sh | UV_INSTALL_DIR=/usr/local/bin sh
-# UV_TOOL_BIN_DIR ensures `uv tool install` places binaries in PATH (not ~/.local/bin)
-ENV UV_TOOL_BIN_DIR=/usr/local/bin
 
 RUN chown node:node /app
 
@@ -221,6 +219,27 @@ RUN ln -sf /app/openclaw.mjs /usr/local/bin/openclaw \
  && chmod 755 /app/openclaw.mjs
 
 ENV NODE_ENV=production
+
+# Unified directory for skill-installed binaries (writable by the node user, on PATH).
+# GOBIN: `go install` (e.g. wacli) writes here instead of $GOPATH/bin.
+# UV_TOOL_BIN_DIR: `uv tool install` (e.g. nano-pdf) writes here instead of ~/.local/bin.
+RUN mkdir -p /home/node/bin && chown node:node /home/node/bin
+ENV GOBIN=/home/node/bin
+ENV UV_TOOL_BIN_DIR=/home/node/bin
+ENV PATH="/home/node/bin:${PATH}"
+
+# Pre-install himalaya to /usr/local/bin (requires root; binary is world-executable).
+# The skill's download-based installer writes to the skill tools dir which is not on PATH,
+# so the only reliable approach is a root-stage install.
+RUN curl -fsSL \
+    https://github.com/pimalaya/himalaya/releases/latest/download/himalaya.x86_64-linux.tgz \
+    | tar -C /usr/local/bin -xz himalaya \
+    && chmod 755 /usr/local/bin/himalaya
+
+# Pre-install mcporter globally (root stage).
+# npm global install by the node user fails because it has no write access to the global
+# npm prefix; installing here as root places it in /usr/local/bin (world-executable).
+RUN npm install -g --ignore-scripts mcporter
 
 # Security hardening: Run as non-root user
 # The node:22-bookworm image includes a 'node' user (uid 1000)

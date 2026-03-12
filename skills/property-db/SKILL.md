@@ -1,82 +1,91 @@
 ---
 name: property-db
 description: "Query and update property management data in Supabase via MCP. Use for all property, tenant, vendor, maintenance, and interaction records."
-metadata:
-  {
-    "openclaw":
-      {
-        "emoji": "🏠",
-      },
-  }
+metadata: { "openclaw": { "emoji": "🏠" } }
 ---
 
 # Property Database Skill
 
-All property management data lives in Supabase. Use the Supabase MCP server (`execute_sql`) for every data operation. Never hard-code data in responses — always query live.
+All property management data lives in Supabase. Use the `exec` tool with `curl` against the Supabase REST API for every data operation. Never hard-code data in responses — always query live.
 
 ## References
 
 - `references/schema.md` — All 5 table schemas, field descriptions, valid enum values, relationship map
 
-## MCP Usage
+## REST API Usage
 
-The Supabase MCP server is configured in OpenClaw settings. Use the `execute_sql` tool for all queries.
+Use the `exec` tool to run `curl` commands against the Supabase REST API. The env vars
+`SUPABASE_URL` and `SUPABASE_SERVICE_KEY` are available in the gateway process at runtime.
 
-### Security: Parameterized Queries
+### Security: URL-encode filter values
 
-Always pass variable data (tenant names, addresses, UUIDs) via MCP's parameterized query
-mechanism — never via string concatenation. The SQL examples in this skill use literal values
-for illustration only. Concatenating user-supplied strings directly into SQL creates SQL
-injection risk.
+Always URL-encode variable data used in query-string filters (addresses, names, UUIDs).
+For simple equality filters PostgREST handles quoting automatically via `eq.<value>` syntax.
+For ILIKE patterns, use `ilike.*value*` — PostgREST handles SQL escaping server-side.
+Never concatenate raw user input directly into the `-d` JSON body without JSON-encoding it first;
+use `jq` or construct the JSON value safely.
 
 ### Read Examples
 
-```sql
--- Get all properties with current status
-SELECT property_id, address, city, status, fix FROM properties;
+```bash
+# Get all properties with current status
+exec: curl -s "$SUPABASE_URL/rest/v1/properties?select=property_id,address,city,status,fix" \
+  -H "apikey: $SUPABASE_SERVICE_KEY" \
+  -H "Authorization: Bearer $SUPABASE_SERVICE_KEY"
 
--- Get tenant for a property
-SELECT t.name, t.email, t.phone, t.lease_start, t.rent_amount, t.birthday
-FROM tenant t
-JOIN properties p ON t.property_id = p.property_id
-WHERE p.address ILIKE '%123 Main%';
+# Get tenant for a property (join via ?select= embedding)
+exec: curl -s "$SUPABASE_URL/rest/v1/tenant?select=name,email,phone,lease_start,rent_amount,birthday,properties(address)&properties.address=ilike.*123+Main*" \
+  -H "apikey: $SUPABASE_SERVICE_KEY" \
+  -H "Authorization: Bearer $SUPABASE_SERVICE_KEY"
 
--- Get vendors by trade type and city
-SELECT name, phone, email, notes
-FROM vendors
-WHERE trade_type = 'plumber' AND city = 'Toronto';
+# Get vendors by trade type and city
+exec: curl -s "$SUPABASE_URL/rest/v1/vendors?select=name,phone,email,notes&trade_type=eq.plumber&city=eq.Toronto" \
+  -H "apikey: $SUPABASE_SERVICE_KEY" \
+  -H "Authorization: Bearer $SUPABASE_SERVICE_KEY"
 
--- Get maintenance history for a property
-SELECT m.issue_type, m.status, m.assigned_worker, m.expense_amount, m.time_stamp
-FROM maintenance m
-JOIN properties p ON m.property_id = p.property_id
-WHERE p.address ILIKE '%123 Main%'
-ORDER BY m.time_stamp DESC;
+# Get maintenance history for a property (by property_id)
+exec: curl -s "$SUPABASE_URL/rest/v1/maintenance?select=issue_type,status,assigned_worker,expense_amount,time_stamp&property_id=eq.<property_uuid>&order=time_stamp.desc" \
+  -H "apikey: $SUPABASE_SERVICE_KEY" \
+  -H "Authorization: Bearer $SUPABASE_SERVICE_KEY"
 
--- Get last 5 interactions for a tenant
-SELECT channel, summary, timestamp
-FROM interactions
-WHERE tenant_id = '<uuid>'
-ORDER BY timestamp DESC
-LIMIT 5;
+# Get last 5 interactions for a tenant
+exec: curl -s "$SUPABASE_URL/rest/v1/interactions?select=channel,summary,timestamp&tenant_id=eq.<uuid>&order=timestamp.desc&limit=5" \
+  -H "apikey: $SUPABASE_SERVICE_KEY" \
+  -H "Authorization: Bearer $SUPABASE_SERVICE_KEY"
 ```
 
 ### Write Examples
 
-```sql
--- Insert new maintenance record
-INSERT INTO maintenance (property_id, property_address, issue_type, status, proof, time_stamp)
-VALUES ('<property_uuid>', '123 Main St', 'appliance', 'problem raised', 'https://...', now());
+```bash
+# Insert new maintenance record
+exec: curl -s -X POST "$SUPABASE_URL/rest/v1/maintenance" \
+  -H "apikey: $SUPABASE_SERVICE_KEY" \
+  -H "Authorization: Bearer $SUPABASE_SERVICE_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Prefer: return=representation" \
+  -d '{"property_id":"<property_uuid>","property_address":"123 Main St","issue_type":"appliance","status":"problem raised","proof":"https://...","time_stamp":"now()"}'
 
--- Update maintenance status
-UPDATE maintenance SET status = 'assigned', assigned_worker = 'Bob Plumbing' WHERE maintenance_id = '<uuid>';
+# Update maintenance status
+exec: curl -s -X PATCH "$SUPABASE_URL/rest/v1/maintenance?maintenance_id=eq.<uuid>" \
+  -H "apikey: $SUPABASE_SERVICE_KEY" \
+  -H "Authorization: Bearer $SUPABASE_SERVICE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"assigned","assigned_worker":"Bob Plumbing"}'
 
--- Log an interaction
-INSERT INTO interactions (tenant_id, name, channel, summary, timestamp)
-VALUES ('<tenant_uuid>', 'Jane Doe', 'email', 'Reported leaking faucet in kitchen', now());
+# Log an interaction
+exec: curl -s -X POST "$SUPABASE_URL/rest/v1/interactions" \
+  -H "apikey: $SUPABASE_SERVICE_KEY" \
+  -H "Authorization: Bearer $SUPABASE_SERVICE_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Prefer: return=representation" \
+  -d '{"tenant_id":"<tenant_uuid>","name":"Jane Doe","channel":"email","summary":"Reported leaking faucet in kitchen"}'
 
--- Update property status
-UPDATE properties SET status = 'fix_needed', fix = 'Leaking kitchen faucet' WHERE property_id = '<uuid>';
+# Update property status
+exec: curl -s -X PATCH "$SUPABASE_URL/rest/v1/properties?property_id=eq.<uuid>" \
+  -H "apikey: $SUPABASE_SERVICE_KEY" \
+  -H "Authorization: Bearer $SUPABASE_SERVICE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"fix_needed","fix":"Leaking kitchen faucet"}'
 ```
 
 ## HITL Rules
@@ -95,6 +104,7 @@ UPDATE properties SET status = 'fix_needed', fix = 'Leaking kitchen faucet' WHER
 ## Query Patterns
 
 When a manager says "check [address]":
+
 1. Query properties by address ILIKE match
 2. Join tenant to get occupant info
 3. Query last 3 maintenance records
@@ -102,5 +112,6 @@ When a manager says "check [address]":
 5. Return a summary: tenant name, rent, status, open issues, last contact
 
 When a manager says "find a [trade] vendor in [city]":
+
 1. Query vendors by trade_type + city
 2. Return name, phone, email, notes for top 3 results
