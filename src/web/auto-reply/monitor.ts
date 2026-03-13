@@ -24,7 +24,7 @@ import {
   resolveReconnectPolicy,
   sleepWithAbort,
 } from "../reconnect.js";
-import { formatError, getWebAuthAgeMs, readWebSelfId } from "../session.js";
+import { formatError, getStatusCode, getWebAuthAgeMs, readWebSelfId } from "../session.js";
 import { whatsappHeartbeatLog, whatsappLog } from "./loggers.js";
 import { buildMentionConfig } from "./mentions.js";
 import { createEchoTracker } from "./monitor/echo.js";
@@ -193,24 +193,38 @@ export async function monitorWebChannel(
       return !hasControlCommand(msg.body, cfg);
     };
 
-    const listener = await (listenerFactory ?? monitorWebInbox)({
-      verbose,
-      accountId: account.accountId,
-      authDir: account.authDir,
-      mediaMaxMb: account.mediaMaxMb,
-      sendReadReceipts: account.sendReadReceipts,
-      debounceMs: inboundDebounceMs,
-      shouldDebounce,
-      onMessage: async (msg: WebInboundMsg) => {
-        handledMessages += 1;
-        lastMessageAt = Date.now();
-        status.lastMessageAt = lastMessageAt;
-        status.lastEventAt = lastMessageAt;
-        emitStatus();
-        _lastInboundMsg = msg;
-        await onMessage(msg);
-      },
-    });
+    let listener;
+    try {
+      listener = await (listenerFactory ?? monitorWebInbox)({
+        verbose,
+        accountId: account.accountId,
+        authDir: account.authDir,
+        mediaMaxMb: account.mediaMaxMb,
+        sendReadReceipts: account.sendReadReceipts,
+        debounceMs: inboundDebounceMs,
+        shouldDebounce,
+        onMessage: async (msg: WebInboundMsg) => {
+          handledMessages += 1;
+          lastMessageAt = Date.now();
+          status.lastMessageAt = lastMessageAt;
+          status.lastEventAt = lastMessageAt;
+          emitStatus();
+          _lastInboundMsg = msg;
+          await onMessage(msg);
+        },
+      });
+    } catch (err) {
+      // monitorWebInbox throws when waitForWaConnection rejects (e.g. stale creds → 401).
+      // lastDisconnect = {error: BoomError, date: Date} — status is nested inside .error
+      const code = getStatusCode(err) ?? getStatusCode((err as { error?: unknown })?.error);
+      if (code === 401) {
+        runtime.error(
+          `WhatsApp session logged out. Open the control UI → WhatsApp → Relink to scan a fresh QR.`,
+        );
+        throw new PermanentChannelExit("logged out (401)");
+      }
+      throw err;
+    }
 
     Object.assign(status, createConnectedChannelStatusPatch());
     status.lastError = null;

@@ -75,7 +75,8 @@ function attachLoginWaiter(accountId: string, login: ActiveLogin) {
         return;
       }
       current.error = formatError(err);
-      current.errorStatus = getStatusCode(err);
+      current.errorStatus =
+        getStatusCode(err) ?? getStatusCode((err as { error?: unknown })?.error);
     });
 }
 
