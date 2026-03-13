@@ -6,6 +6,7 @@ import { formatCliCommand } from "../../cli/command-format.js";
 import { waitForever } from "../../cli/wait.js";
 import { loadConfig } from "../../config/config.js";
 import { createConnectedChannelStatusPatch } from "../../gateway/channel-status-patches.js";
+import { PermanentChannelExit } from "../../gateway/permanent-exit.js";
 import { logVerbose } from "../../globals.js";
 import { formatDurationPrecise } from "../../infra/format-time/format-duration.ts";
 import { enqueueSystemEvent } from "../../infra/system-events.js";
@@ -396,10 +397,10 @@ export async function monitorWebChannel(
 
     if (loggedOut) {
       runtime.error(
-        `WhatsApp session logged out. Run \`${formatCliCommand("openclaw channels login --channel web")}\` to relink.`,
+        `WhatsApp session logged out. Open the control UI → WhatsApp → Relink to scan a fresh QR.`,
       );
       await closeListener();
-      break;
+      throw new PermanentChannelExit("logged out (401)");
     }
 
     if (isNonRetryableWebCloseStatus(statusCode)) {
@@ -415,7 +416,7 @@ export async function monitorWebChannel(
         `WhatsApp Web connection closed (status ${statusCode}: session conflict). Resolve conflicting WhatsApp Web sessions, then relink with \`${formatCliCommand("openclaw channels login --channel web")}\`. Stopping web monitoring.`,
       );
       await closeListener();
-      break;
+      throw new PermanentChannelExit(`session conflict (${statusCode})`);
     }
 
     reconnectAttempts += 1;

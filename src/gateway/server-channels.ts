@@ -9,6 +9,7 @@ import type { createSubsystemLogger } from "../logging/subsystem.js";
 import type { PluginRuntime } from "../plugins/runtime/types.js";
 import { DEFAULT_ACCOUNT_ID } from "../routing/session-key.js";
 import type { RuntimeEnv } from "../runtime.js";
+import { PermanentChannelExit } from "./permanent-exit.js";
 
 const CHANNEL_RESTART_POLICY: BackoffPolicy = {
   initialMs: 5_000,
@@ -116,6 +117,8 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
   const restartAttempts = new Map<string, number>();
   // Tracks accounts that were manually stopped so we don't auto-restart them.
   const manuallyStopped = new Set<string>();
+  // Tracks accounts that exited permanently (e.g. 401 logged out) — no auto-restart until explicit Relink.
+  const permanentlyStopped = new Set<string>();
 
   const restartKey = (channelId: ChannelId, accountId: string) => `${channelId}:${accountId}`;
 
@@ -205,6 +208,7 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
         const rKey = restartKey(channelId, id);
         if (!preserveManualStop) {
           manuallyStopped.delete(rKey);
+          permanentlyStopped.delete(rKey); // cleared when user explicitly restarts via Relink
         }
 
         const abort = new AbortController();
@@ -237,6 +241,11 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
         });
         const trackedPromise = Promise.resolve(task)
           .catch((err) => {
+            if (err instanceof PermanentChannelExit) {
+              permanentlyStopped.add(rKey);
+              log.warn?.(`[${id}] channel permanently stopped: ${err.message}`);
+              return;
+            }
             const message = formatErrorMessage(err);
             setRuntime(channelId, id, { accountId: id, lastError: message });
             log.error?.(`[${id}] channel exited: ${message}`);
@@ -249,7 +258,7 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
             });
           })
           .then(async () => {
-            if (manuallyStopped.has(rKey)) {
+            if (manuallyStopped.has(rKey) || permanentlyStopped.has(rKey)) {
               return;
             }
             const attempt = (restartAttempts.get(rKey) ?? 0) + 1;
