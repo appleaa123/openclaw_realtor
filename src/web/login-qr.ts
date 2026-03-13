@@ -8,6 +8,7 @@ import { resolveWhatsAppAccount } from "./accounts.js";
 import { renderQrPngBase64 } from "./qr-image.js";
 import {
   createWaSocket,
+  flushCredsSave,
   formatError,
   getStatusCode,
   logoutWeb,
@@ -88,6 +89,9 @@ async function restartLoginSocket(login: ActiveLogin, runtime: RuntimeEnv) {
   runtime.log(
     info("WhatsApp asked for a restart after pairing (code 515); retrying connection once…"),
   );
+  // Baileys fires creds.update before the 515 disconnect; the disk write is async.
+  // Wait for any in-flight saves to land before reading creds from disk in createWaSocket.
+  await flushCredsSave();
   closeSocket(login.sock);
   try {
     const sock = await createWaSocket(false, login.verbose, {

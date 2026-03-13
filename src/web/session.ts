@@ -44,6 +44,11 @@ function enqueueSaveCreds(
     });
 }
 
+/** Waits for any in-flight credential saves to complete before reading from disk. */
+export async function flushCredsSave(): Promise<void> {
+  await credsSaveQueue;
+}
+
 async function safeSaveCreds(
   authDir: string,
   saveCreds: () => Promise<void> | void,
