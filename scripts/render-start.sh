@@ -5,6 +5,8 @@ openclaw config set gateway.controlUi.dangerouslyDisableDeviceAuth true
 openclaw config set gateway.bind lan
 # Ensure WhatsApp plugin is loaded into the active registry so QR login works
 openclaw config set channels.whatsapp.enabled true
+# allowFrom must be set before dmPolicy open — the config validator requires "*" in allowFrom when dmPolicy=open
+openclaw config set channels.whatsapp.allowFrom '["*"]'
 # Allow DMs from any sender (default "pairing" sends challenges, blocks agent responses)
 openclaw config set channels.whatsapp.dmPolicy open
 # Allow group messages (default "allowlist" with empty list silently drops all group messages)
