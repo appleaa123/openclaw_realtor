@@ -8,6 +8,7 @@ import { resolveUserPath } from "../utils.js";
 import { installDownloadSpec } from "./skills-install-download.js";
 import { formatInstallFailureMessage } from "./skills-install-output.js";
 import {
+  clearHasBinaryCache,
   hasBinary,
   loadWorkspaceSkillEntries,
   resolveSkillsInstallPreferences,
@@ -208,6 +209,8 @@ function createInstallFailure(params: {
 }
 
 function createInstallSuccess(result: CommandResult): SkillInstallResult {
+  // Force re-scan on next eligibility check so newly installed binary is detected
+  clearHasBinaryCache();
   return {
     ok: true,
     message: "Installed",

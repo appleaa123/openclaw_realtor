@@ -136,6 +136,12 @@ export async function startWebLoginWithQr(
 
   await resetActiveLogin(account.accountId);
 
+  // When force-relinking, clear stale creds so Baileys generates a fresh QR
+  // instead of reconnecting with the expired session and never calling onQr.
+  if (opts.force) {
+    await logoutWeb({ authDir: account.authDir, isLegacyAuthDir: account.isLegacyAuthDir });
+  }
+
   let resolveQr: ((qr: string) => void) | null = null;
   let rejectQr: ((err: Error) => void) | null = null;
   const qrPromise = new Promise<string>((resolve, reject) => {

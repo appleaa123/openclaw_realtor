@@ -178,3 +178,11 @@ export function hasBinary(bin: string): boolean {
   hasBinaryCache.set(bin, false);
   return false;
 }
+
+/**
+ * Clears the binary check cache. Call after installing a new binary so that
+ * subsequent hasBinary() calls re-scan PATH instead of returning stale results.
+ */
+export function clearHasBinaryCache(): void {
+  hasBinaryCache.clear();
+}
