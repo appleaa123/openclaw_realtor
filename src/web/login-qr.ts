@@ -34,6 +34,7 @@ type ActiveLogin = {
   waitPromise: Promise<void>;
   restartAttempted: boolean;
   verbose: boolean;
+  runtime: RuntimeEnv;
 };
 
 const ACTIVE_LOGIN_TTL_MS = 3 * 60_000;
@@ -70,14 +71,45 @@ function attachLoginWaiter(accountId: string, login: ActiveLogin) {
         current.connected = true;
       }
     })
-    .catch((err) => {
+    .catch(async (err) => {
       const current = activeLogins.get(accountId);
       if (current?.id !== login.id) {
         return;
       }
+      const status = getStatusCode(err) ?? getStatusCode((err as { error?: unknown })?.error);
+
+      // 515 = WhatsApp requires a reconnect with the just-paired credentials.
+      // Restart immediately here so it works even when waitForWebLogin is not
+      // running (Render's WS proxy can time out the long-poll before the scan).
+      if (status === 515 && !current.restartAttempted && isLoginFresh(current)) {
+        current.restartAttempted = true;
+        current.runtime.log(
+          info("WhatsApp asked for a restart after pairing (code 515); retrying connection once…"),
+        );
+        await flushCredsSave();
+        closeSocket(current.sock);
+        try {
+          const sock = await createWaSocket(false, current.verbose, {
+            authDir: current.authDir,
+          });
+          current.sock = sock;
+          current.error = undefined;
+          current.errorStatus = undefined;
+          attachLoginWaiter(accountId, current);
+          return;
+        } catch (restartErr) {
+          current.error = formatError(restartErr);
+          current.errorStatus = getStatusCode(restartErr);
+          current.runtime.log(danger(`WhatsApp 515 restart failed: ${current.error}`));
+        }
+        return;
+      }
+
       current.error = formatError(err);
-      current.errorStatus =
-        getStatusCode(err) ?? getStatusCode((err as { error?: unknown })?.error);
+      current.errorStatus = status;
+      current.runtime.log(
+        danger(`WhatsApp login error (status ${status ?? "unknown"}): ${current.error}`),
+      );
     });
 }
 
@@ -198,6 +230,7 @@ export async function startWebLoginWithQr(
     waitPromise: Promise.resolve(),
     restartAttempted: false,
     verbose: Boolean(opts.verbose),
+    runtime,
   };
   activeLogins.set(account.accountId, login);
   if (pendingQr && !login.qr) {
