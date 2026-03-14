@@ -11,10 +11,62 @@ openclaw config set channels.whatsapp.allowFrom '["*"]'
 openclaw config set channels.whatsapp.dmPolicy open
 # Allow group messages (default "allowlist" with empty list silently drops all group messages)
 openclaw config set channels.whatsapp.groupPolicy open
-# Provision workspace templates on first run
+
+# ---------------------------------------------------------------------------
+# Multi-agent workspace provisioning
+# Each agent gets an isolated workspace with its own SOUL.md and shared skills
+# ---------------------------------------------------------------------------
+
+for AGENT in manager rent maintenance legal escalation; do
+  WORKSPACE="/data/workspace-${AGENT}"
+  mkdir -p "${WORKSPACE}/forms"
+  # Copy agent-specific SOUL on first run only (preserve any runtime edits)
+  [ -f "${WORKSPACE}/SOUL.md" ] || cp "/app/workspace-templates/SOUL-${AGENT}.md" "${WORKSPACE}/SOUL.md"
+  # Copy HEARTBEAT on first run only (same for all agents — health check is global)
+  [ -f "${WORKSPACE}/HEARTBEAT.md" ] || cp /app/workspace-templates/HEARTBEAT.md "${WORKSPACE}/HEARTBEAT.md"
+  # Symlink shared skills directory (agents share the same skill set)
+  [ -L "${WORKSPACE}/skills" ] || ln -s /app/skills "${WORKSPACE}/skills"
+done
+
+# Keep legacy single-workspace for backwards compat (used by direct openclaw session without --agent flag)
 mkdir -p /data/workspace/forms
 [ -f /data/workspace/SOUL.md ]      || cp /app/workspace-templates/SOUL.md      /data/workspace/SOUL.md
 [ -f /data/workspace/HEARTBEAT.md ] || cp /app/workspace-templates/HEARTBEAT.md /data/workspace/HEARTBEAT.md
+
+# ---------------------------------------------------------------------------
+# Register named agents with their workspace directories
+# ---------------------------------------------------------------------------
+
+openclaw config set agents.list '[
+  {"id":"manager",     "workspace":"/data/workspace-manager"},
+  {"id":"rent",        "workspace":"/data/workspace-rent"},
+  {"id":"maintenance", "workspace":"/data/workspace-maintenance"},
+  {"id":"legal",       "workspace":"/data/workspace-legal"},
+  {"id":"escalation",  "workspace":"/data/workspace-escalation"}
+]'
+
+# ---------------------------------------------------------------------------
+# WhatsApp per-DM agent routing
+# Map each team member's phone number to their agent session.
+# Phone numbers are provided via Render environment variables.
+# Set dmPolicy to allowlist so only known numbers are accepted.
+# ---------------------------------------------------------------------------
+
+# Build allowFrom list from phone env vars (only set if all 5 are provided)
+if [ -n "$MANAGER_WHATSAPP" ] && [ -n "$RENT_WHATSAPP" ] && [ -n "$MAINTENANCE_WHATSAPP" ] && [ -n "$LEGAL_WHATSAPP" ] && [ -n "$ESCALATION_WHATSAPP" ]; then
+  openclaw config set channels.whatsapp.allowFrom \
+    "[\"${MANAGER_WHATSAPP}\",\"${RENT_WHATSAPP}\",\"${MAINTENANCE_WHATSAPP}\",\"${LEGAL_WHATSAPP}\",\"${ESCALATION_WHATSAPP}\"]"
+  openclaw config set channels.whatsapp.dmPolicy allowlist
+  openclaw config set channels.whatsapp.dms \
+    "{\"${MANAGER_WHATSAPP}\":{\"agentId\":\"manager\"},\"${RENT_WHATSAPP}\":{\"agentId\":\"rent\"},\"${MAINTENANCE_WHATSAPP}\":{\"agentId\":\"maintenance\"},\"${LEGAL_WHATSAPP}\":{\"agentId\":\"legal\"},\"${ESCALATION_WHATSAPP}\":{\"agentId\":\"escalation\"}}"
+else
+  echo "WARNING: One or more WhatsApp phone number env vars not set. Keeping dmPolicy=open for initial setup."
+  echo "  Required: MANAGER_WHATSAPP, RENT_WHATSAPP, MAINTENANCE_WHATSAPP, LEGAL_WHATSAPP, ESCALATION_WHATSAPP"
+fi
+
+# ---------------------------------------------------------------------------
+# Gateway auth
+# ---------------------------------------------------------------------------
 
 # Configure gateway auth token if provided (enables token-based auth as an alternative to password)
 if [ -n "$OPENCLAW_GATEWAY_TOKEN" ]; then
