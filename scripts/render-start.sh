@@ -65,6 +65,21 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Routing bindings: associate each agent with the WhatsApp channel.
+# These channel-level bindings (no peer/account qualifier) make all agents
+# visible in the Chat agent selector and populate each agent's Channels tab.
+# Actual per-DM routing to the right agent is still handled by
+# channels.whatsapp.dms above (WhatsApp-extension-level, peer-specific).
+# ---------------------------------------------------------------------------
+openclaw config set bindings '[
+  {"agentId":"manager",     "match":{"channel":"whatsapp"}},
+  {"agentId":"rent",        "match":{"channel":"whatsapp"}},
+  {"agentId":"maintenance", "match":{"channel":"whatsapp"}},
+  {"agentId":"legal",       "match":{"channel":"whatsapp"}},
+  {"agentId":"escalation",  "match":{"channel":"whatsapp"}}
+]'
+
+# ---------------------------------------------------------------------------
 # Gateway auth
 # ---------------------------------------------------------------------------
 
