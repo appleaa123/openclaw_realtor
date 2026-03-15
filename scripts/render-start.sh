@@ -20,8 +20,8 @@ openclaw config set channels.whatsapp.groupPolicy open
 for AGENT in manager rent maintenance legal escalation; do
   WORKSPACE="/data/workspace-${AGENT}"
   mkdir -p "${WORKSPACE}/forms"
-  # Copy agent-specific SOUL on first run only (preserve any runtime edits)
-  [ -f "${WORKSPACE}/SOUL.md" ] || cp "/app/workspace-templates/SOUL-${AGENT}.md" "${WORKSPACE}/SOUL.md"
+  # Always overwrite SOUL from templates on every redeploy (picks up template changes)
+  cp "/app/workspace-templates/SOUL-${AGENT}.md" "${WORKSPACE}/SOUL.md"
   # Copy HEARTBEAT on first run only (same for all agents — health check is global)
   [ -f "${WORKSPACE}/HEARTBEAT.md" ] || cp /app/workspace-templates/HEARTBEAT.md "${WORKSPACE}/HEARTBEAT.md"
   # Symlink shared skills directory (agents share the same skill set)
@@ -30,7 +30,7 @@ done
 
 # Keep legacy single-workspace for backwards compat (used by direct openclaw session without --agent flag)
 mkdir -p /data/workspace/forms
-[ -f /data/workspace/SOUL.md ]      || cp /app/workspace-templates/SOUL.md      /data/workspace/SOUL.md
+cp /app/workspace-templates/SOUL.md /data/workspace/SOUL.md
 [ -f /data/workspace/HEARTBEAT.md ] || cp /app/workspace-templates/HEARTBEAT.md /data/workspace/HEARTBEAT.md
 
 # ---------------------------------------------------------------------------
@@ -65,19 +65,23 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Routing bindings: associate each agent with the WhatsApp channel.
-# These channel-level bindings (no peer/account qualifier) make all agents
-# visible in the Chat agent selector and populate each agent's Channels tab.
-# Actual per-DM routing to the right agent is still handled by
-# channels.whatsapp.dms above (WhatsApp-extension-level, peer-specific).
+# Routing bindings: peer-specific so each team member routes to their agent.
+# Tier-1 (peer match) — highest priority in resolveAgentRoute().
+# Manager gets a Tier-7 channel fallback for unknown/unauthenticated senders.
 # ---------------------------------------------------------------------------
-openclaw config set bindings '[
-  {"agentId":"manager",     "match":{"channel":"whatsapp"}},
-  {"agentId":"rent",        "match":{"channel":"whatsapp"}},
-  {"agentId":"maintenance", "match":{"channel":"whatsapp"}},
-  {"agentId":"legal",       "match":{"channel":"whatsapp"}},
-  {"agentId":"escalation",  "match":{"channel":"whatsapp"}}
-]'
+if [ -n "$MANAGER_WHATSAPP" ] && [ -n "$RENT_WHATSAPP" ] && [ -n "$MAINTENANCE_WHATSAPP" ] && [ -n "$LEGAL_WHATSAPP" ] && [ -n "$ESCALATION_WHATSAPP" ]; then
+  openclaw config set bindings "[
+    {\"agentId\":\"manager\",     \"match\":{\"channel\":\"whatsapp\",\"peer\":\"${MANAGER_WHATSAPP}\"}},
+    {\"agentId\":\"rent\",        \"match\":{\"channel\":\"whatsapp\",\"peer\":\"${RENT_WHATSAPP}\"}},
+    {\"agentId\":\"maintenance\", \"match\":{\"channel\":\"whatsapp\",\"peer\":\"${MAINTENANCE_WHATSAPP}\"}},
+    {\"agentId\":\"legal\",       \"match\":{\"channel\":\"whatsapp\",\"peer\":\"${LEGAL_WHATSAPP}\"}},
+    {\"agentId\":\"escalation\",  \"match\":{\"channel\":\"whatsapp\",\"peer\":\"${ESCALATION_WHATSAPP}\"}},
+    {\"agentId\":\"manager\",     \"match\":{\"channel\":\"whatsapp\"}}
+  ]"
+else
+  echo "WARNING: Phone env vars not set — all WhatsApp messages route to manager."
+  openclaw config set bindings '[{"agentId":"manager","match":{"channel":"whatsapp"}}]'
+fi
 
 # ---------------------------------------------------------------------------
 # Gateway auth
@@ -98,20 +102,21 @@ fi
 openclaw config set agents.defaults.model.primary "google/gemini-2.5-flash"
 
 # ---------------------------------------------------------------------------
-# Session bootstrap: create an initial "main" session for each non-manager
-# agent so they appear in the Chat agent selector.
-# Guarded by a .session-initialized marker in /data (persistent volume) so
-# this runs only once — subsequent container restarts skip it.
+# Session bootstrap: write a minimal sessions.json for each non-manager agent
+# so they appear in the Chat agent selector.
+# Direct file write — no openclaw CLI flag dependencies, no gateway startup delay.
+# State dir = OPENCLAW_STATE_DIR=/data/.openclaw (render.yaml line 14).
+# Guard: skip if sessions.json already exists (real or prior bootstrap sessions).
 # ---------------------------------------------------------------------------
+STATE_DIR="${OPENCLAW_STATE_DIR:-/data/.openclaw}"
 for AGENT in rent maintenance legal escalation; do
-  MARKER="/data/workspace-${AGENT}/.session-initialized"
-  if [ ! -f "$MARKER" ]; then
-    echo "Bootstrapping session for agent: ${AGENT}"
-    openclaw agent --local --agent "${AGENT}" --session-key main \
-      --thinking off \
-      --message "System initialization complete. You are now registered and ready. Reply: Ready." \
-      --timeout-seconds 120 || true
-    touch "$MARKER"
+  SESSIONS_FILE="${STATE_DIR}/agents/${AGENT}/sessions/sessions.json"
+  if [ ! -f "$SESSIONS_FILE" ]; then
+    mkdir -p "$(dirname "$SESSIONS_FILE")"
+    EPOCH_MS="$(date +%s)000"
+    printf '{"agent:%s:main":{"sessionId":"%s-main","updatedAt":%s,"displayName":"main"}}\n' \
+      "$AGENT" "$AGENT" "$EPOCH_MS" > "$SESSIONS_FILE"
+    echo "Created initial session for agent: ${AGENT}"
   fi
 done
 
