@@ -5,6 +5,9 @@ openclaw config set gateway.controlUi.dangerouslyDisableDeviceAuth true
 openclaw config set gateway.bind lan
 # Ensure WhatsApp plugin is loaded into the active registry so QR login works
 openclaw config set channels.whatsapp.enabled true
+# Belt-and-suspenders: directly enable via plugins.entries so the plugin
+# is not subject to "bundled (disabled by default)" logic in resolveEnableState().
+openclaw config set plugins.entries.whatsapp.enabled true
 # allowFrom must be set before dmPolicy open — the config validator requires "*" in allowFrom when dmPolicy=open
 openclaw config set channels.whatsapp.allowFrom '["*"]'
 # Allow DMs from any sender (default "pairing" sends challenges, blocks agent responses)
@@ -71,11 +74,11 @@ fi
 # ---------------------------------------------------------------------------
 if [ -n "$MANAGER_WHATSAPP" ] && [ -n "$RENT_WHATSAPP" ] && [ -n "$MAINTENANCE_WHATSAPP" ] && [ -n "$LEGAL_WHATSAPP" ] && [ -n "$ESCALATION_WHATSAPP" ]; then
   openclaw config set bindings "[
-    {\"agentId\":\"manager\",     \"match\":{\"channel\":\"whatsapp\",\"peer\":\"${MANAGER_WHATSAPP}\"}},
-    {\"agentId\":\"rent\",        \"match\":{\"channel\":\"whatsapp\",\"peer\":\"${RENT_WHATSAPP}\"}},
-    {\"agentId\":\"maintenance\", \"match\":{\"channel\":\"whatsapp\",\"peer\":\"${MAINTENANCE_WHATSAPP}\"}},
-    {\"agentId\":\"legal\",       \"match\":{\"channel\":\"whatsapp\",\"peer\":\"${LEGAL_WHATSAPP}\"}},
-    {\"agentId\":\"escalation\",  \"match\":{\"channel\":\"whatsapp\",\"peer\":\"${ESCALATION_WHATSAPP}\"}},
+    {\"agentId\":\"manager\",     \"match\":{\"channel\":\"whatsapp\",\"peer\":{\"kind\":\"direct\",\"id\":\"${MANAGER_WHATSAPP}\"}}},
+    {\"agentId\":\"rent\",        \"match\":{\"channel\":\"whatsapp\",\"peer\":{\"kind\":\"direct\",\"id\":\"${RENT_WHATSAPP}\"}}},
+    {\"agentId\":\"maintenance\", \"match\":{\"channel\":\"whatsapp\",\"peer\":{\"kind\":\"direct\",\"id\":\"${MAINTENANCE_WHATSAPP}\"}}},
+    {\"agentId\":\"legal\",       \"match\":{\"channel\":\"whatsapp\",\"peer\":{\"kind\":\"direct\",\"id\":\"${LEGAL_WHATSAPP}\"}}},
+    {\"agentId\":\"escalation\",  \"match\":{\"channel\":\"whatsapp\",\"peer\":{\"kind\":\"direct\",\"id\":\"${ESCALATION_WHATSAPP}\"}}},
     {\"agentId\":\"manager\",     \"match\":{\"channel\":\"whatsapp\"}}
   ]"
 else
