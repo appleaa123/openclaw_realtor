@@ -63,7 +63,7 @@ When running a scheduled summary cycle, your task is:
    Items needing your approval: [count or "None"]
    ```
 
-6. Send via `wacli` to `MANAGER_WHATSAPP`. No HITL needed for these system-generated summaries — they are read-only status reports, not actions.
+6. Send via the `message` tool: `message(action="send", channel="whatsapp", target=MANAGER_WHATSAPP, text="...")`. No HITL needed for these system-generated summaries — they are read-only status reports, not actions.
 
 ## Escalation Routing
 
@@ -81,7 +81,7 @@ When running a scheduled summary cycle, your task is:
 - Electrical sparks or burning smell
 - Fire
 
-Send immediate WhatsApp alert to `MANAGER_WHATSAPP` with tenant name and phone. Say "Call tenant now." Do not wait.
+Send via `message(action="send", channel="whatsapp", target=MANAGER_WHATSAPP, text="EMERGENCY: [tenant name] [phone]. Call tenant now.")`. Do not wait.
 
 ## Communication Tone
 
@@ -99,13 +99,13 @@ Send immediate WhatsApp alert to `MANAGER_WHATSAPP` with tenant name and phone. 
 - **ltb-forms**: Fill Ontario LTB forms (N4/N9/N12), generate expense reports
 - **escalation-brief**: Aggregate context and brief the team on urgent situations
 - **himalaya**: Send outbound emails to tenants
-- **wacli**: Send WhatsApp messages to team and vendors
+- **wacli**: Search or sync WhatsApp history only (history backfill, message search). For outbound agent notifications to team/manager, use the native `message` tool instead.
 - **summarize**: Summarize long email threads or maintenance histories
 - **video-frames**: Extract frames from maintenance video attachments
 
 ## Database
 
-All data lives in Supabase. Use the Supabase MCP server (`execute_sql`) for every data operation. See `property-db` skill for query patterns.
+All data lives in Supabase. Use the `property-db` skill (curl against the Supabase REST API) for every data operation. Env vars `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` are available at runtime. See `property-db` for all query and write patterns.
 
 ## What You Never Do
 

@@ -97,4 +97,22 @@ fi
 # Set default agent model to Gemini (picked up via GEMINI_API_KEY env var)
 openclaw config set agents.defaults.model.primary "google/gemini-2.5-flash"
 
+# ---------------------------------------------------------------------------
+# Session bootstrap: create an initial "main" session for each non-manager
+# agent so they appear in the Chat agent selector.
+# Guarded by a .session-initialized marker in /data (persistent volume) so
+# this runs only once — subsequent container restarts skip it.
+# ---------------------------------------------------------------------------
+for AGENT in rent maintenance legal escalation; do
+  MARKER="/data/workspace-${AGENT}/.session-initialized"
+  if [ ! -f "$MARKER" ]; then
+    echo "Bootstrapping session for agent: ${AGENT}"
+    openclaw agent --local --agent "${AGENT}" --session-key main \
+      --thinking off \
+      --message "System initialization complete. You are now registered and ready. Reply: Ready." \
+      --timeout-seconds 120 || true
+    touch "$MARKER"
+  fi
+done
+
 exec openclaw gateway --allow-unconfigured
